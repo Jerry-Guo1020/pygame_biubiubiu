@@ -92,8 +92,52 @@ class BasePlane(Base):
             if self.image_index < self.bomb_picture_num:
                 self.screen.blit(self.bomb_picture_list[self.image_index], (self.x, self.y))
         
+        # 正常飞行
         else:
             self.screen.blit(self.image, (self.x, self.y))
-            
+        
+        # 越界判断:当飞出屏幕下方
         if self.y > 860:
             self.active = False
+            
+        # 删除越界的子弹
+        self.clean_bullets()
+    
+    # 清理并更新子弹状态
+    def clean_bullets(self):
+        # 遍历当前飞机发出所有子弹的列表
+        for bullet in self.bullet_list[:]:
+            # 首先先在屏幕画出子弹
+            bullet.display()
+            # 改变子弹的位置 
+            bullet.move()
+            if bullet.judge():
+                self.bullet_list.remove(bullet)
+    
+    def isHitted(self, other_plane, width, height):
+        """碰撞检测:判断我方有没有被敌机的子弹打中"""
+        if not self.active or self.HP <= 0:
+            return False
+            
+        is_hit = False
+        
+        # 检测主子弹
+        for bullet in other_plane.bullet_list[:]:
+            if (bullet.x > self.x + 0.05*width and bullet.x < self.x + 0.95*width and 
+                bullet.y + 0.1*height > self.y and bullet.y < self.y + 0.8*height):
+                self.HP -= bullet.damage_value
+                other_plane.bullet_list.remove(bullet)
+                self.hitted = True
+                is_hit = True
+
+        # 如果是Hero且开启了三管炮，检测额外炮管
+        if other_plane.plane_type == 3 and hasattr(other_plane, 'barrel_2'):
+            for barrel in [other_plane.barrel_2, other_plane.barrel_3]:
+                for bullet in barrel[:]:
+                     if (bullet.x > self.x + 0.05*width and bullet.x < self.x + 0.95*width and 
+                        bullet.y + 0.1*height > self.y and bullet.y < self.y + 0.8*height):
+                        self.HP -= bullet.damage_value
+                        barrel.remove(bullet)
+                        self.hitted = True
+                        is_hit = True
+        return is_hit
