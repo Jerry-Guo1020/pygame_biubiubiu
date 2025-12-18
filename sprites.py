@@ -3,125 +3,100 @@ import random
 from pygame.locals import *
 import config
 
+# --- 基础类 ---
 class Base(object):
     def __init__(self, screen, x, y, image_name):
         self.x = x
         self.y = y
         self.screen = screen
-        
         try:
             self.image = pygame.image.load(image_name)
         except Exception:
-            print(f"这个照片的读取出现了错误：{image_name}")
+            print(f"图片读取错误：{image_name}")
             self.image = pygame.Surface((10, 10))
 
-
+# --- 飞机基类 (核心逻辑修复) ---
 class BasePlane(Base):
     """飞机的基本类"""
     def __init__(self, plane_type, screen, x, y, image_name, picture_num, HP_temp):
         super().__init__(screen, x, y, image_name)
         
-        """战斗相关"""
-        # 子弹列表：用于存储这架飞机飞射出去的所有“子弹对象”
+        # 战斗属性
         self.bullet_list = [] 
-        # 飞机类型的索引：用来区分是hi哪一种飞机
         self.plane_type = plane_type 
-        # 飞机当前血量
         self.HP = HP_temp 
-        # 记录已经发射的数量,默认开始为0
         self.fire_bullet_count = 0        
         
-        """状态标记"""
-        # 标记对象是否存活
-        self.active = True 
-        # 是否开启爆炸状态
-        self.hitted = False
-        self.scored = False
+        # 状态标记
+        self.active = True    # 存活状态
+        self.hitted = False   # 是否被击中
+        self.scored = False   # 是否已加分
         
-        """爆炸动画的相关基本配置"""
-        # 存储爆炸效果的图片的列表 
+        # 爆炸动画配置
         self.bomb_picture_list = [] 
         self.bomb_picture_num = picture_num
-        # 动画延时计数器：用来控制爆炸动画的播放速度。 
         self.last_update_time = pygame.time.get_ticks()
-        # 设置动画速度: 每 100 毫秒就换一张图
-        self.frame_rate = 100
-        # 当前动画帧索引：记录当前正在播放到第几张的爆炸图
+        self.frame_rate = 100 # 动画速度
         self.image_index = 0
-      
-         
-        
+             
     def create_images(self, bomb_picture_name):
         for i in range(1, self.bomb_picture_num + 1):
-            self.bomb_picture_list.append(pygame.image.load("./images/" + bomb_picture_name + str(i) + ".png"))
-            
-            
+            try:
+                img = pygame.image.load("./images/" + bomb_picture_name + str(i) + ".png")
+                self.bomb_picture_list.append(img)
+            except Exception as e:
+                print(f"爆炸图片缺失: {bomb_picture_name}{i}.png")
+
     def update_and_draw(self):
-        # 第一个版本的写法
-        # """显示并更新飞机状态,爆炸动画逻辑"""
-        # # 首先判断飞机是否已经
-        # # 1\被击中了 hitted
-        # # 2\被击中之后爆炸的每一帧的照片是否全部放完
-        # # 3\血量是否大于小于0
-        # if self.hitted and self.image_index < self.bomb_picture_num and self.HP <= 0:
-        #     # 如果满足,则:
-        #     # 1\在当前位置开始放爆炸的过程帧的所有照片(self.x, self.y)
-        #     # 2\通过 self.image_index 来判断当前的爆炸过程,一般是从0开始
-        #     # 3\然后再通过 bomb_picture_list 列表,这个列表存放的是爆炸全过程的照片,从0开始是第一张,通过列表的顺序代表了照片的爆炸的过程
-        #     self.screen.blit(self.bomb_picture_list[self.image_index], (self.x, self.y))
-            
-        #     # 重要知识点!!!!
-        #     self.picture_count += 1
-        #     if self.picture_count == config.PLANE_BOMB_TIME[self.plane_type]:
-        #         self.picture_count = 0
-        #         self.image_index += 1
+        """【核心修复】：显示并更新状态"""
         
-        
-        
-        
-        # 第二个版本的写法
+        # 1. 如果已经死亡（active=False），直接不再绘制，彻底消失
+        if not self.active:
+            return
+
         now = pygame.time.get_ticks()
-        
-        if self.hitted and self.HP <=0:
-            if now - self.last_update_time > self.frame_rate:
-                self.last_update_time = now
-                self.image_index += 1
-                
-                if self.image_index >= self.bomb_picture_num:
-                    self.active = False
-            
+
+        # 2. 爆炸状态处理 (被击中 且 血量<=0)
+        if self.hitted and self.HP <= 0:
+            # 播放动画
             if self.image_index < self.bomb_picture_num:
-                self.screen.blit(self.bomb_picture_list[self.image_index], (self.x, self.y))
-        
-        # 正常飞行
+                # 绘制当前爆炸帧
+                if self.image_index < len(self.bomb_picture_list):
+                    self.screen.blit(self.bomb_picture_list[self.image_index], (self.x, self.y))
+                
+                # 切换下一帧
+                if now - self.last_update_time > self.frame_rate:
+                    self.last_update_time = now
+                    self.image_index += 1
+            
+            # 动画播放完毕
+            else:
+                self.active = False # 标记为彻底死亡，等待 Main 移除
+                return # 立即结束
+
+        # 3. 正常存活状态
         else:
             self.screen.blit(self.image, (self.x, self.y))
-        
-        # 越界判断:当飞出屏幕下方
+
+        # 4. 越界检查
         if self.y > 860:
             self.active = False
-            
-        # 删除越界的子弹
+
+        # 5. 更新子弹
         self.clean_bullets()
-    
-    # 清理并更新子弹状态
+
     def clean_bullets(self):
-        # 遍历当前飞机发出所有子弹的列表
         for bullet in self.bullet_list[:]:
-            # 首先先在屏幕画出子弹
             bullet.display()
-            # 改变子弹的位置 
             bullet.move()
             if bullet.judge():
                 self.bullet_list.remove(bullet)
-    
+
     def isHitted(self, other_plane, width, height):
-        """碰撞检测:判断我方有没有被敌机的子弹打中"""
         if not self.active or self.HP <= 0:
             return False
-            
-        is_hit = False
         
+        is_hit = False
         # 检测主子弹
         for bullet in other_plane.bullet_list[:]:
             if (bullet.x > self.x + 0.05*width and bullet.x < self.x + 0.95*width and 
@@ -131,7 +106,7 @@ class BasePlane(Base):
                 self.hitted = True
                 is_hit = True
 
-        # 如果是Hero且开启了三管炮，检测额外炮管
+        # 检测额外炮管 (如果是Hero)
         if other_plane.plane_type == 3 and hasattr(other_plane, 'barrel_2'):
             for barrel in [other_plane.barrel_2, other_plane.barrel_3]:
                 for bullet in barrel[:]:
@@ -142,15 +117,15 @@ class BasePlane(Base):
                         self.hitted = True
                         is_hit = True
         return is_hit
-    
+
     def fire(self, bullet_maximun):
-            if self.HP > 0:
-                random_num = random.randint(1, 60)
-                if (random_num == 10 or random_num == 45) and len(self.bullet_list) < bullet_maximun:
-                    self.bullet_list.append(EnemyBullet(self.screen, self.x, self.y, self))
-                    self.fire_bullet_count += 1
-                    
-                    
+        if self.HP > 0:
+            random_num = random.randint(1, 60)
+            if (random_num == 10 or random_num == 45) and len(self.bullet_list) < bullet_maximun:
+                self.bullet_list.append(EnemyBullet(self.screen, self.x, self.y, self))
+                self.fire_bullet_count += 1
+
+# --- 英雄飞机类 ---
 class HeroPlane(BasePlane):
     def __init__(self, screen):
         super().__init__(3, screen, 210, 728, "./images/hero1.png", 4, config.HP_LIST[3])
@@ -161,9 +136,9 @@ class HeroPlane(BasePlane):
         self.barrel_2 = []
         self.barrel_3 = []
         self.three_bullet_stock = 50
-        self.play_fire_music = None # Main会赋值给它
+        self.play_fire_music = None 
 
-    # 移动逻辑保持不变
+    # 移动方法
     def move_left(self): self.x -= 7
     def move_right(self): self.x += 7
     def move_up(self): self.y -= 6
@@ -184,9 +159,7 @@ class HeroPlane(BasePlane):
         if key in self.key_down_list: self.key_down_list.remove(key)
 
     def press_move(self):
-        # 简化原有的按键逻辑
         if not self.key_down_list: return
-        
         keys = set(self.key_down_list)
         if K_LEFT in keys and K_UP in keys: self.move_left_and_up()
         elif K_RIGHT in keys and K_UP in keys: self.move_right_and_up()
@@ -214,7 +187,6 @@ class HeroPlane(BasePlane):
 
     def fire(self):
         if self.play_fire_music: self.play_fire_music.play()
-        
         if not self.is_three_bullet:
             if len(self.bullet_list) < config.PLANE_MAXIMUM_BULLET[self.plane_type]:
                 self.bullet_list.append(Bullet(self.screen, self.x+40, self.y-14, self))
@@ -228,7 +200,6 @@ class HeroPlane(BasePlane):
 
     def clean_bullets(self):
         super().clean_bullets()
-        # 处理额外炮管
         for barrel in [self.barrel_2, self.barrel_3]:
             for bullet in barrel[:]:
                 bullet.display()
@@ -237,26 +208,21 @@ class HeroPlane(BasePlane):
                     barrel.remove(bullet)
 
     def supply_hitted(self, supply):
-        """判断是否吃到补给"""
         if not supply or not self.HP: return False
-        
         s_w = config.SUPPLY_SIZE[supply.supply_type]["width"]
         s_h = config.SUPPLY_SIZE[supply.supply_type]["height"]
-        
         s_left = supply.x + s_w * 0.15
         s_right = supply.x + s_w * 0.85
         s_top = supply.y + s_h * 0.4
         s_bottom = supply.y + s_h * 0.9
-        
-        # 英雄的判定范围
         h_w = config.PLANE_SIZE[3]["width"]
         h_h = config.PLANE_SIZE[3]["height"]
-        
         if (s_left > self.x + 0.05*h_w and s_right < self.x + 0.95*h_w and 
             s_top < self.y + 0.95*h_h and s_bottom > self.y + 0.1*h_h):
             return True
         return False
 
+# --- 敌机类 ---
 class Enemy0Plane(BasePlane):
     def __init__(self, screen):
         super().__init__(0, screen, random.randint(12, 418), random.randint(-50, -40), 
@@ -275,10 +241,8 @@ class Enemy1Plane(BasePlane):
         speed = config.CURRENT_DIFFICULTY["enemy_speed"][1]
         if self.direction == "right": self.x += speed
         elif self.direction == "left": self.x -= speed
-        
         if self.x + 70 > 480: self.direction = "left"
         elif self.x < 0: self.direction = "right"
-        
         if self.y < self.num_y: self.y += speed
         elif self.fire_bullet_count > 10: self.y += (speed + 1)
 
@@ -287,18 +251,16 @@ class Enemy2Plane(BasePlane):
         super().__init__(2, screen, 158, -246, "./images/enemy2.png", 5, config.HP_LIST[2])
         self.create_images("enemy2_down")
         self.direction = "right"
-
     def move(self):
         speed = config.CURRENT_DIFFICULTY["enemy_speed"][2]
         if self.direction == "right": self.x += speed
         elif self.direction == "left": self.x -= speed
-        
         if self.x + 165 > 480: self.direction = "left"
         elif self.x < 0: self.direction = "right"
-        
         if self.y < 0: self.y += speed
         elif self.fire_bullet_count > 25: self.y += (speed - 2)
 
+# --- 子弹与补给类 ---
 class BaseBullet(Base):
     def __init__(self, screen, x, y, image_name, plane=None):
         super().__init__(screen, x, y, image_name)
@@ -329,4 +291,3 @@ class Supply(BaseBullet):
         self.supply_type = s_type
     def move(self): self.y += self.speed
     def judge(self): return self.y > 855
-        
