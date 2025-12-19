@@ -48,7 +48,7 @@ class BasePlane(Base):
                 print(f"爆炸图片缺失: {bomb_picture_name}{i}.png")
 
     def update_and_draw(self):
-        """【核心修复】：显示并更新状态"""
+        """显示并更新状态"""
         
         # 1. 如果已经死亡（active=False），直接不再绘制，彻底消失
         if not self.active:
