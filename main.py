@@ -166,6 +166,13 @@ class GameManager:
             self.window_screen.blit(self.boss_hp_img, (480, 640))
             hp_val = max(0, self.enemy2_list[0].HP)
             self.draw_number(hp_val, 590, 640)
+            
+        # 返回主界面按钮 - 调整位置避免与BOSS血量重叠
+        self.return_button = pygame.Rect(530, 590, 100, 40)
+        pygame.draw.rect(self.window_screen, (100, 100, 200), self.return_button)
+        font = pygame.font.SysFont('SimHei', 20)
+        return_text = font.render('返回菜单', True, (255, 255, 255))
+        self.window_screen.blit(return_text, (self.return_button.centerx - return_text.get_width()//2, self.return_button.centery - return_text.get_height()//2))
 
     def draw_number(self, num, x, y):
         h, t, s = utils.cut_number(num)
@@ -248,6 +255,9 @@ class GameManager:
                     # 退出
                     elif 532 < mx < 642 and 810 < my < 834:
                         sys.exit()
+                    # 返回主界面按钮
+                    elif hasattr(self, 'return_button') and self.return_button.collidepoint(mx, my):
+                        self.return_to_main_menu()
 
     def select_difficulty(self):
         """显示难度选择界面"""
@@ -363,6 +373,14 @@ class GameManager:
             
             time.sleep(0.05)
 
+    def return_to_main_menu(self):
+        """返回主菜单界面"""
+        # 保存最高分
+        utils.save_max_score(self.hit_score)
+        # 重新开始游戏并显示难度选择界面
+        self.reborn()
+        self.select_difficulty()
+
     def run(self):
         print("jerry的期末作业")
         
@@ -398,35 +416,41 @@ class GameManager:
             elif self.hero and not self.hero.active:
                 # 英雄飞机已爆炸，显示游戏结束界面
                 self.show_game_over()
+                # 处理输入以允许用户操作（重新开始、退出等）
+                self.process_input()
+                time.sleep(0.04)
+                continue  # 跳过剩余的游戏循环逻辑
             else:
                 self.hero = None # 彻底清除引用
 
-            # 6. 补给逻辑
-            for supply in [self.blood_supply, self.bullet_supply]:
-                if supply:
-                    supply.display()
-                    supply.move()
-                    # 回收越界补给
-                    to_delete = False
-                    if supply.judge(): 
-                        to_delete = True
-                    # 吃到补给
-                    if self.hero and self.hero.active and self.hero.supply_hitted(supply):
-                        if supply.supply_type == 0: # 血量
-                            self.hero.HP = min(41, self.hero.HP - supply.supply_HP)
-                        else: # 弹药
-                            self.hero.is_three_bullet = True
-                            self.hero.three_bullet_stock += 20
-                        to_delete = True
-                    
-                    if to_delete:
-                        if supply == self.blood_supply: self.blood_supply = None
-                        elif supply == self.bullet_supply: self.bullet_supply = None
+            # 6. 补给逻辑 (仅在英雄活跃时处理)
+            if self.hero and self.hero.active:
+                for supply in [self.blood_supply, self.bullet_supply]:
+                    if supply:
+                        supply.display()
+                        supply.move()
+                        # 回收越界补给
+                        to_delete = False
+                        if supply.judge(): 
+                            to_delete = True
+                        # 吃到补给
+                        if self.hero and self.hero.active and self.hero.supply_hitted(supply):
+                            if supply.supply_type == 0: # 血量
+                                self.hero.HP = min(41, self.hero.HP - supply.supply_HP)
+                            else: # 弹药
+                                self.hero.is_three_bullet = True
+                                self.hero.three_bullet_stock += 20
+                            to_delete = True
+                        
+                        if to_delete:
+                            if supply == self.blood_supply: self.blood_supply = None
+                            elif supply == self.bullet_supply: self.bullet_supply = None
 
-            # 7. 敌机逻辑
-            self.process_enemy_logic(self.enemy0_list)
-            self.process_enemy_logic(self.enemy1_list)
-            self.process_enemy_logic(self.enemy2_list)
+            # 7. 敌机逻辑 (仅在英雄活跃时处理)
+            if self.hero and self.hero.active:
+                self.process_enemy_logic(self.enemy0_list)
+                self.process_enemy_logic(self.enemy1_list)
+                self.process_enemy_logic(self.enemy2_list)
 
             # 8. 刷新屏幕
             pygame.display.update()

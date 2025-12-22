@@ -82,7 +82,10 @@ class BasePlane(Base):
         # 第二个版本的写法
         now = pygame.time.get_ticks()
         
-        if self.hitted and self.HP <=0:
+        if (self.hitted and self.HP <=0) or self.HP <= 0:
+            # 确保被击中标志被设置
+            if not self.hitted:
+                self.hitted = True
             if now - self.last_update_time > self.frame_rate:
                 self.last_update_time = now
                 self.image_index += 1
@@ -132,7 +135,6 @@ class BasePlane(Base):
                 other_plane.bullet_list.remove(bullet)
                 self.hitted = True
                 is_hit = True
-
         # 如果是Hero且开启了三管炮，检测额外炮管
         if other_plane.plane_type == 3 and hasattr(other_plane, 'barrel_2'):
             for barrel in [other_plane.barrel_2, other_plane.barrel_3]:
