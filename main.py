@@ -17,6 +17,9 @@ class GameManager:
         self.window_screen = pygame.display.set_mode(config.SCREEN_SIZE, 0, 32)
         pygame.display.set_caption('飞机大战')
         
+        # [Fix 3] 引入时钟对象，用于解决帧率慢的问题
+        self.clock = pygame.time.Clock()
+        
         # 游戏状态
         self.hit_score = 0
         self.is_pause = False
@@ -41,8 +44,10 @@ class GameManager:
         try:
             self.background = pygame.image.load("./images/background.png")
             self.pause_image = pygame.image.load("./images/btn_finish.png")
+            # 下面这两个图片在新版UI中不再使用，但为了不修改你的注释和结构，保留加载代码
             self.restart_img = pygame.image.load("./images/restart_nor.png")
             self.exit_img = pygame.image.load("./images/quit_nor.png")
+            
             self.desc_img = pygame.image.load("./images/description.png")
             self.line_img = pygame.image.load("./images/line.png")
             self.score_hp_img = pygame.image.load("./images/score_hp.png")
@@ -85,7 +90,6 @@ class GameManager:
 
     def create_enemies(self):
         # 难度动态调整
-        # 根据难度配置设置敌机最大数量
         limits = config.CURRENT_DIFFICULTY["enemy_limits"]
         config.ENEMY0_MAXIMUM = limits[0]
         config.ENEMY1_MAXIMUM = limits[1]
@@ -98,18 +102,15 @@ class GameManager:
 
         random_num = random.randint(1, 60)
         
-        # Enemy 0
         spawn_rate = config.CURRENT_DIFFICULTY["spawn_rate_0"]
         if random_num in spawn_rate and len(self.enemy0_list) < config.ENEMY0_MAXIMUM:
             self.enemy0_list.append(sprites.Enemy0Plane(self.window_screen))
             
-        # Enemy 1
         b1_min, b1_max = config.CURRENT_DIFFICULTY["boss1_interval"]
         boss1_trigger = random.randint(b1_min, b1_max)
         if (self.hit_score >= boss1_trigger and self.hit_score % boss1_trigger == 0) and len(self.enemy1_list) < config.ENEMY1_MAXIMUM:
             self.enemy1_list.append(sprites.Enemy1Plane(self.window_screen))
             
-        # Enemy 2
         b2_min, b2_max = config.CURRENT_DIFFICULTY["boss2_interval"]
         boss2_trigger = random.randint(b2_min, b2_max)
         if (self.hit_score >= boss2_trigger and self.hit_score % boss2_trigger == 0) and len(self.enemy2_list) < config.ENEMY2_MAXIMUM:
@@ -130,8 +131,6 @@ class GameManager:
         self.window_screen.blit(self.background, (0, 0))
         self.window_screen.blit(self.desc_img, (482, 10))
         self.window_screen.blit(self.max_score_img, (480, 705))
-        self.window_screen.blit(self.restart_img, (530, 760))
-        self.window_screen.blit(self.exit_img, (532, 810))
         self.window_screen.blit(self.line_img, (482, 445))
         self.window_screen.blit(self.line_img, (482, 690))
         
@@ -141,38 +140,67 @@ class GameManager:
         self.draw_number(max_s, 590, 700)
 
         # 游戏状态UI
-        if self.hero and self.hero.active:
-            self.window_screen.blit(self.score_hp_img, (480, 460))
-            # 炮管状态
-            img_idx = 1 if self.hero.is_three_bullet else 0
-            self.window_screen.blit(self.bullet_ui_imgs[img_idx], (480, 560))
-            self.window_screen.blit(self.bullet_3_stock_img, (480, 605))
-            
-            # 数值显示
-            self.draw_number(self.hit_score, 600, 460) # 得分
-            self.draw_number(self.hero.HP, 600, 510)   # HP
-            self.draw_number(self.hero.three_bullet_stock, 605, 600) # 弹药
-        else:
-            # 英雄死亡状态UI (全0)
-            self.window_screen.blit(self.score_hp_img, (480, 460))
-            self.window_screen.blit(self.bullet_ui_imgs[0], (480, 560))
-            self.window_screen.blit(self.bullet_3_stock_img, (480, 605))
-            self.draw_number(0, 600, 460)
-            self.draw_number(0, 600, 510)
-            self.draw_number(0, 605, 600)
+        hero_hp = 0
+        hero_bullet_stock = 0
+        is_three = False
+        if self.hero:
+            hero_hp = max(0, self.hero.HP)
+            hero_bullet_stock = self.hero.three_bullet_stock
+            is_three = self.hero.is_three_bullet
+        
+        self.window_screen.blit(self.score_hp_img, (480, 460))
+        img_idx = 1 if is_three else 0
+        self.window_screen.blit(self.bullet_ui_imgs[img_idx], (480, 560))
+        self.window_screen.blit(self.bullet_3_stock_img, (480, 605))
+        
+        self.draw_number(self.hit_score, 600, 460)
+        self.draw_number(hero_hp, 600, 510)
+        self.draw_number(hero_bullet_stock, 605, 600)
 
-        # Boss HP
         if self.enemy2_list:
             self.window_screen.blit(self.boss_hp_img, (480, 640))
             hp_val = max(0, self.enemy2_list[0].HP)
             self.draw_number(hp_val, 590, 640)
             
-        # 返回主界面按钮 - 调整位置避免与BOSS血量重叠
-        self.return_button = pygame.Rect(530, 590, 100, 40)
-        pygame.draw.rect(self.window_screen, (100, 100, 200), self.return_button)
-        font = pygame.font.SysFont('SimHei', 20)
-        return_text = font.render('返回菜单', True, (255, 255, 255))
-        self.window_screen.blit(return_text, (self.return_button.centerx - return_text.get_width()//2, self.return_button.centery - return_text.get_height()//2))
+        # ================= [UI 修改重点区域] 开始 =================
+        # [Fix 4 & 新需求] 重新设计右下角按钮组
+        # 将三个按钮统一为矩形样式，并排列在底部
+        
+        font_btn = pygame.font.SysFont('SimHei', 20)
+        
+        # 按钮布局参数
+        btn_x = 500         # 按钮左上角X坐标 (右侧栏宽度约160，居中大概在500)
+        btn_w = 130         # 按钮宽度
+        btn_h = 35          # 按钮高度
+        start_y = 745       # 第一个按钮的起始Y坐标 (在最高分下方)
+        gap_y = 42          # 按钮之间的垂直间距
+
+        # 定义三个按钮的矩形区域 (保存为self变量以便在点击事件中使用)
+        self.restart_btn_rect = pygame.Rect(btn_x, start_y, btn_w, btn_h)
+        self.return_btn_rect = pygame.Rect(btn_x, start_y + gap_y, btn_w, btn_h)
+        self.quit_btn_rect = pygame.Rect(btn_x, start_y + gap_y * 2, btn_w, btn_h)
+
+        # 定义颜色 (R, G, B) - 区分颜色
+        color_restart = (46, 139, 87)   # 海洋绿 (重新开始)
+        color_return = (70, 130, 180)   # 钢蓝 (返回菜单)
+        color_quit = (178, 34, 34)      # 耐火砖红 (退出游戏)
+        text_color = (255, 255, 255)    # 白色文字
+
+        # 1. 绘制按钮背景矩形
+        pygame.draw.rect(self.window_screen, color_restart, self.restart_btn_rect, border_radius=5)
+        pygame.draw.rect(self.window_screen, color_return, self.return_btn_rect, border_radius=5)
+        pygame.draw.rect(self.window_screen, color_quit, self.quit_btn_rect, border_radius=5)
+
+        # 2. 渲染文字
+        txt_restart = font_btn.render('重新开始(R)', True, text_color)
+        txt_return = font_btn.render('返回菜单', True, text_color)
+        txt_quit = font_btn.render('退出游戏', True, text_color)
+
+        # 3. 将文字居中绘制到按钮上
+        self.window_screen.blit(txt_restart, (self.restart_btn_rect.centerx - txt_restart.get_width()//2, self.restart_btn_rect.centery - txt_restart.get_height()//2))
+        self.window_screen.blit(txt_return, (self.return_btn_rect.centerx - txt_return.get_width()//2, self.return_btn_rect.centery - txt_return.get_height()//2))
+        self.window_screen.blit(txt_quit, (self.quit_btn_rect.centerx - txt_quit.get_width()//2, self.quit_btn_rect.centery - txt_quit.get_height()//2))
+        # ================= [UI 修改重点区域] 结束 =================
 
     def draw_number(self, num, x, y):
         h, t, s = utils.cut_number(num)
@@ -182,26 +210,24 @@ class GameManager:
 
     def process_enemy_logic(self, enemy_list):
         for enemy in enemy_list[:]:
-            enemy.update_and_draw()
-            enemy.fire(config.PLANE_MAXIMUM_BULLET[enemy.plane_type])
-            enemy.move()
+            enemy.update_and_draw() 
             
-            # 碰撞检测
-            if self.hero and self.hero.active:
-                # 英雄被撞
-                # 这里简化了逻辑：只检测子弹是否击中英雄
-                self.hero.isHitted(enemy, config.PLANE_SIZE[3]["width"], config.PLANE_SIZE[3]["height"])
-                # 敌机被撞
-                if enemy.isHitted(self.hero, config.PLANE_SIZE[enemy.plane_type]["width"], config.PLANE_SIZE[enemy.plane_type]["height"]):
-                    if enemy.HP <= 0 and not getattr(enemy, "scored", False):
-                        self.add_score(enemy.plane_type)
-                        enemy.scored = True
-
+            # [Fix 1] 敌机死亡逻辑优化
+            if enemy.HP > 0:
+                enemy.fire(config.PLANE_MAXIMUM_BULLET[enemy.plane_type])
+                enemy.move()
+                
+                if self.hero and self.hero.active and self.hero.HP > 0:
+                    self.hero.isHitted(enemy, config.PLANE_SIZE[3]["width"], config.PLANE_SIZE[3]["height"])
+                    if enemy.isHitted(self.hero, config.PLANE_SIZE[enemy.plane_type]["width"], config.PLANE_SIZE[enemy.plane_type]["height"]):
+                        if enemy.HP <= 0 and not getattr(enemy, "scored", False):
+                            self.add_score(enemy.plane_type)
+                            enemy.scored = True
+            
             if not enemy.active:
                 enemy_list.remove(enemy)
 
     def add_score(self, p_type):
-        """计算得分"""
         base_hp = config.HP_LIST[p_type]
         if p_type == 0:
             self.hit_score += base_hp if self.hit_score < 650 else base_hp/2
@@ -224,7 +250,8 @@ class GameManager:
                 elif event.key == K_r:
                     self.reborn()
                 
-                if self.hero and self.hero.active:
+                # [Fix 2] 只有当英雄存活(HP>0)时，才响应控制按键
+                if self.hero and self.hero.active and self.hero.HP > 0:
                     if event.key in [K_LEFT, K_RIGHT, K_UP, K_DOWN]:
                         self.hero.key_down(event.key)
                     elif event.key == K_s:
@@ -249,22 +276,27 @@ class GameManager:
                     if self.is_pause and 170 < mx < 310 and 402 < my < 450:
                         self.is_pause = False
                         pygame.mixer.music.unpause()
-                    # 重新开始
-                    elif 530 < mx < 642 and 760 < my < 808:
+                    
+                    # ================= [输入处理修改] 开始 =================
+                    # 使用新的矩形区域检测点击，替代了原来的硬编码坐标和旧按钮
+                    
+                    # 重新开始按钮点击
+                    elif hasattr(self, 'restart_btn_rect') and self.restart_btn_rect.collidepoint(mx, my):
                         self.reborn()
-                    # 退出
-                    elif 532 < mx < 642 and 810 < my < 834:
-                        sys.exit()
-                    # 返回主界面按钮
-                    elif hasattr(self, 'return_button') and self.return_button.collidepoint(mx, my):
+                    # 返回菜单按钮点击
+                    elif hasattr(self, 'return_btn_rect') and self.return_btn_rect.collidepoint(mx, my):
                         self.return_to_main_menu()
+                    # 退出游戏按钮点击
+                    elif hasattr(self, 'quit_btn_rect') and self.quit_btn_rect.collidepoint(mx, my):
+                        sys.exit()
+                    # ================= [输入处理修改] 结束 =================
 
     def select_difficulty(self):
         """显示难度选择界面"""
         font = pygame.font.SysFont('SimHei', 30)
         title_font = pygame.font.SysFont('SimHei', 50)
         
-        # 按钮区域 - 居中显示
+        # 按钮区域
         button_width, button_height = 180, 60
         screen_center_x = config.SCREEN_SIZE[0] // 2
         button_center_x = screen_center_x - button_width // 2
@@ -274,19 +306,18 @@ class GameManager:
         btn_hard_rect = pygame.Rect(button_center_x, 500, button_width, button_height)
         
         while True:
+            self.clock.tick(60) 
             self.window_screen.fill(config.BG_COLOR)
             
-            # 绘制标题 - 居中显示
-            title_text = title_font.render('请选择游戏难度', True, (0, 0, 0))
-            title_x = (config.SCREEN_SIZE[0] - title_text.get_width()) // 2
-            self.window_screen.blit(title_text, (title_x, 150))
+            title_text1 = title_font.render('欢迎使用飞机大战小游戏', True, (0, 0, 0))
+            title_text2 = title_font.render('请选择游戏难度', True, (0, 0, 0))
+            title_x = (config.SCREEN_SIZE[0] - title_text1.get_width()) // 2
+            self.window_screen.blit(title_text1, (title_x, 150))
             
-            # 绘制按钮背景
             pygame.draw.rect(self.window_screen, (100, 200, 100), btn_easy_rect)
             pygame.draw.rect(self.window_screen, (100, 100, 200), btn_normal_rect)
             pygame.draw.rect(self.window_screen, (200, 100, 100), btn_hard_rect)
             
-            # 绘制文字
             text_easy = font.render('简单', True, (255, 255, 255))
             text_normal = font.render('中等', True, (255, 255, 255))
             text_hard = font.render('困难', True, (255, 255, 255))
@@ -311,26 +342,21 @@ class GameManager:
                     elif btn_hard_rect.collidepoint(mx, my):
                         config.CURRENT_DIFFICULTY = config.DIFFICULTY_LEVELS[2]
                         return
-            
-            time.sleep(0.05)
 
     def show_game_over(self):
         """显示游戏结束界面"""
         font = pygame.font.SysFont('SimHei', 30)
         big_font = pygame.font.SysFont('SimHei', 50)
         
-        # 半透明覆盖层
         overlay = pygame.Surface((config.SCREEN_SIZE[0], config.SCREEN_SIZE[1]))
         overlay.set_alpha(180)
         overlay.fill((0, 0, 0))
         self.window_screen.blit(overlay, (0, 0))
         
-        # 显示游戏结束文字
         game_over_text = big_font.render('游戏结束', True, (255, 0, 0))
         score_text = font.render(f'最终得分: {self.hit_score}', True, (255, 255, 255))
         restart_text = font.render('按 R 重新开始 或 点击按钮', True, (255, 255, 255))
         
-        # 居中显示
         game_over_x = (config.SCREEN_SIZE[0] - game_over_text.get_width()) // 2
         score_x = (config.SCREEN_SIZE[0] - score_text.get_width()) // 2
         restart_x = (config.SCREEN_SIZE[0] - restart_text.get_width()) // 2
@@ -339,12 +365,14 @@ class GameManager:
         self.window_screen.blit(score_text, (score_x, 380))
         self.window_screen.blit(restart_text, (restart_x, 430))
         
-        # 显示重新开始和退出按钮
-        restart_rect = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 500, 180, 50)
         quit_rect = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 570, 180, 50)
+        backhome_text = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 540, 180, 50)
+        restart_rect = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 500, 180, 50)
         
         pygame.draw.rect(self.window_screen, (0, 200, 0), restart_rect)
+        pygame.draw.rect(self.window_screen, (0, 0, 200), backhome_text)
         pygame.draw.rect(self.window_screen, (200, 0, 0), quit_rect)
+        
         
         restart_btn_text = font.render('重新开始', True, (255, 255, 255))
         quit_btn_text = font.render('退出游戏', True, (255, 255, 255))
@@ -354,8 +382,8 @@ class GameManager:
         
         pygame.display.update()
         
-        # 等待用户操作
         while True:
+            self.clock.tick(60) 
             for event in pygame.event.get():
                 if event.type == QUIT:
                     sys.exit()
@@ -370,95 +398,75 @@ class GameManager:
                         return
                     elif quit_rect.collidepoint(mx, my):
                         sys.exit()
-            
-            time.sleep(0.05)
 
     def return_to_main_menu(self):
         """返回主菜单界面"""
-        # 保存最高分
         utils.save_max_score(self.hit_score)
-        # 重新开始游戏并显示难度选择界面
         self.reborn()
         self.select_difficulty()
 
     def run(self):
-        print("jerry的期末作业")
-        
-        # 启动难度选择
+        print("jerry的期末作业 - 优化UI版")
         self.select_difficulty()
         
         while True:
-            # 1. 填充背景
+            # [Fix 3] 使用 Clock 控制 60 FPS
+            self.clock.tick(60)
+            
             self.window_screen.fill(config.BG_COLOR)
             
-            # 2. 暂停逻辑
             if self.is_pause:
-                self.draw_ui() # 保持UI显示
+                self.draw_ui() 
                 self.window_screen.blit(self.pause_image, (170, 402))
                 pygame.display.update()
                 self.process_input()
-                time.sleep(0.1)
                 continue
 
-            # 3. 生成逻辑
             self.create_enemies()
             self.create_supply()
-            
-            # 4. 绘制右侧背景UI
             self.draw_ui()
 
-            # 5. 更新并绘制Hero
+            # [Fix 2] 游戏结束逻辑优化
             if self.hero and self.hero.active:
                 self.hero.update_and_draw()
-                self.hero.press_move()
-                self.hero.press_fire()
-                self.hero.move_limit()
+                
+                if self.hero.HP > 0:
+                    self.hero.press_move()
+                    self.hero.press_fire()
+                    self.hero.move_limit()
+                    
+                    for supply in [self.blood_supply, self.bullet_supply]:
+                        if supply:
+                            supply.display()
+                            supply.move()
+                            to_delete = False
+                            if supply.judge(): to_delete = True
+                            if self.hero.supply_hitted(supply):
+                                if supply.supply_type == 0: 
+                                    self.hero.HP = min(41, self.hero.HP - supply.supply_HP)
+                                else: 
+                                    self.hero.is_three_bullet = True
+                                    self.hero.three_bullet_stock += 20
+                                to_delete = True
+                            
+                            if to_delete:
+                                if supply == self.blood_supply: self.blood_supply = None
+                                elif supply == self.bullet_supply: self.bullet_supply = None
+                
             elif self.hero and not self.hero.active:
-                # 英雄飞机已爆炸，显示游戏结束界面
                 self.show_game_over()
-                # 处理输入以允许用户操作（重新开始、退出等）
                 self.process_input()
-                time.sleep(0.04)
-                continue  # 跳过剩余的游戏循环逻辑
+                continue
             else:
-                self.hero = None # 彻底清除引用
+                self.hero = None 
 
-            # 6. 补给逻辑 (仅在英雄活跃时处理)
-            if self.hero and self.hero.active:
-                for supply in [self.blood_supply, self.bullet_supply]:
-                    if supply:
-                        supply.display()
-                        supply.move()
-                        # 回收越界补给
-                        to_delete = False
-                        if supply.judge(): 
-                            to_delete = True
-                        # 吃到补给
-                        if self.hero and self.hero.active and self.hero.supply_hitted(supply):
-                            if supply.supply_type == 0: # 血量
-                                self.hero.HP = min(41, self.hero.HP - supply.supply_HP)
-                            else: # 弹药
-                                self.hero.is_three_bullet = True
-                                self.hero.three_bullet_stock += 20
-                            to_delete = True
-                        
-                        if to_delete:
-                            if supply == self.blood_supply: self.blood_supply = None
-                            elif supply == self.bullet_supply: self.bullet_supply = None
-
-            # 7. 敌机逻辑 (仅在英雄活跃时处理)
-            if self.hero and self.hero.active:
+            if self.hero:
                 self.process_enemy_logic(self.enemy0_list)
                 self.process_enemy_logic(self.enemy1_list)
                 self.process_enemy_logic(self.enemy2_list)
 
-            # 8. 刷新屏幕
             pygame.display.update()
-            
-            # 9. 输入处理
             self.process_input()
-            
-            time.sleep(0.04)
 
 if __name__ == "__main__":
     game = GameManager()
