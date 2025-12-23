@@ -344,60 +344,87 @@ class GameManager:
                         return
 
     def show_game_over(self):
-        """显示游戏结束界面"""
-        font = pygame.font.SysFont('SimHei', 30)
-        big_font = pygame.font.SysFont('SimHei', 50)
+        """显示游戏结束界面 - UI优化版"""
+        # 定义字体
+        font_btn = pygame.font.SysFont('SimHei', 22)  # 按钮字体略微调大
+        font_score = pygame.font.SysFont('SimHei', 35)
+        big_font = pygame.font.SysFont('SimHei', 60)
         
+        # 绘制半透明遮罩
         overlay = pygame.Surface((config.SCREEN_SIZE[0], config.SCREEN_SIZE[1]))
-        overlay.set_alpha(180)
+        overlay.set_alpha(200) # 稍微加深一点透明度，突出文字
         overlay.fill((0, 0, 0))
         self.window_screen.blit(overlay, (0, 0))
         
-        game_over_text = big_font.render('游戏结束', True, (255, 0, 0))
-        score_text = font.render(f'最终得分: {self.hit_score}', True, (255, 255, 255))
-        restart_text = font.render('按 R 重新开始 或 点击按钮', True, (255, 255, 255))
+        # 绘制标题和分数
+        game_over_text = big_font.render('游戏结束', True, (255, 50, 50)) # 标题用淡红色
+        score_text = font_score.render(f'最终得分: {self.hit_score}', True, (255, 215, 0)) # 分数用金色
         
-        game_over_x = (config.SCREEN_SIZE[0] - game_over_text.get_width()) // 2
-        score_x = (config.SCREEN_SIZE[0] - score_text.get_width()) // 2
-        restart_x = (config.SCREEN_SIZE[0] - restart_text.get_width()) // 2
+        # 计算标题居中坐标
+        cx = config.SCREEN_SIZE[0] // 2
+        self.window_screen.blit(game_over_text, (cx - game_over_text.get_width() // 2, 200))
+        self.window_screen.blit(score_text, (cx - score_text.get_width() // 2, 300))
         
-        self.window_screen.blit(game_over_text, (game_over_x, 300))
-        self.window_screen.blit(score_text, (score_x, 380))
-        self.window_screen.blit(restart_text, (restart_x, 430))
+        # ================= [按钮 UI 配置] =================
+        # 按钮参数
+        btn_w, btn_h = 200, 45  # 按钮宽200，高45
+        btn_x = cx - btn_w // 2 # 按钮X轴居中
+        start_y = 420           # 第一个按钮的起始Y高度
+        gap_y = 65              # 按钮垂直间距
         
-        quit_rect = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 570, 180, 50)
-        backhome_text = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 540, 180, 50)
-        restart_rect = pygame.Rect(config.SCREEN_SIZE[0]//2 - 90, 500, 180, 50)
+        # 定义颜色 (和你主界面保持一致)
+        color_restart = (46, 139, 87)   # 海洋绿
+        color_return = (70, 130, 180)   # 钢蓝
+        color_quit = (178, 34, 34)      # 耐火砖红
+        text_color = (255, 255, 255)
+
+        # 定义按钮区域 (Rect)
+        rect_restart = pygame.Rect(btn_x, start_y, btn_w, btn_h)
+        rect_return = pygame.Rect(btn_x, start_y + gap_y, btn_w, btn_h)
+        rect_quit = pygame.Rect(btn_x, start_y + gap_y * 2, btn_w, btn_h)
         
-        pygame.draw.rect(self.window_screen, (0, 200, 0), restart_rect)
-        pygame.draw.rect(self.window_screen, (0, 0, 200), backhome_text)
-        pygame.draw.rect(self.window_screen, (200, 0, 0), quit_rect)
+        # 绘制按钮背景 (带圆角)
+        pygame.draw.rect(self.window_screen, color_restart, rect_restart, border_radius=10)
+        pygame.draw.rect(self.window_screen, color_return, rect_return, border_radius=10)
+        pygame.draw.rect(self.window_screen, color_quit, rect_quit, border_radius=10)
         
+        # 渲染按钮文字
+        txt_restart = font_btn.render('重新开始(R)', True, text_color)
+        txt_return = font_btn.render('返回主菜单', True, text_color)
+        txt_quit = font_btn.render('退出游戏', True, text_color)
         
-        restart_btn_text = font.render('重新开始', True, (255, 255, 255))
-        quit_btn_text = font.render('退出游戏', True, (255, 255, 255))
-        
-        self.window_screen.blit(restart_btn_text, (restart_rect.centerx - restart_btn_text.get_width()//2, restart_rect.centery - restart_btn_text.get_height()//2))
-        self.window_screen.blit(quit_btn_text, (quit_rect.centerx - quit_btn_text.get_width()//2, quit_rect.centery - quit_btn_text.get_height()//2))
+        # 文字居中绘制
+        self.window_screen.blit(txt_restart, (rect_restart.centerx - txt_restart.get_width()//2, rect_restart.centery - txt_restart.get_height()//2))
+        self.window_screen.blit(txt_return, (rect_return.centerx - txt_return.get_width()//2, rect_return.centery - txt_return.get_height()//2))
+        self.window_screen.blit(txt_quit, (rect_quit.centerx - txt_quit.get_width()//2, rect_quit.centery - txt_quit.get_height()//2))
         
         pygame.display.update()
         
+        # ================= [事件循环] =================
         while True:
             self.clock.tick(60) 
             for event in pygame.event.get():
                 if event.type == QUIT:
                     sys.exit()
+                    
                 elif event.type == KEYDOWN:
                     if event.key == K_r:
                         self.reborn()
-                        return
+                        return # 退出当前循环，回到run循环
+                        
                 elif event.type == MOUSEBUTTONDOWN:
-                    mx, my = pygame.mouse.get_pos()
-                    if restart_rect.collidepoint(mx, my):
-                        self.reborn()
-                        return
-                    elif quit_rect.collidepoint(mx, my):
-                        sys.exit()
+                    if pygame.mouse.get_pressed()[0]: # 确保是左键点击
+                        mx, my = pygame.mouse.get_pos()
+                        
+                        # 检测点击区域
+                        if rect_restart.collidepoint(mx, my):
+                            self.reborn()
+                            return
+                        elif rect_return.collidepoint(mx, my):
+                            self.return_to_main_menu()
+                            return
+                        elif rect_quit.collidepoint(mx, my):
+                            sys.exit()
 
     def return_to_main_menu(self):
         """返回主菜单界面"""
