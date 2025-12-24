@@ -400,7 +400,6 @@ class GameManager:
         
         pygame.display.update()
         
-        # ================= [事件循环] =================
         while True:
             self.clock.tick(60) 
             for event in pygame.event.get():
