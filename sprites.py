@@ -137,7 +137,7 @@ class BasePlane(Base):
             if bullet.judge():
                 # 如果超出边界则从列表中移除
                 self.bullet_list.remove(bullet)
-    
+
     def isHitted(self, other_plane, width, height):
         """碰撞检测:判断我方有没有被敌机的子弹打中"""
         # 如果当前飞机不活跃或血量为0，返回False
